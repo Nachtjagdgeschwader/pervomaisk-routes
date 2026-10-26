@@ -134,6 +134,31 @@ details li{margin:3px 0}
 code{font-family:var(--f-mono);font-size:.92em;background:var(--surface-2);padding:1px 4px;border-radius:4px}
 .summary{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
 .summary .big{font:700 30px var(--f-display);font-variant-numeric:tabular-nums}
+
+.fsbtn{position:absolute;left:10px;top:10px;z-index:4;width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.fsbtn svg{width:18px;height:18px}
+.views:fullscreen{height:100%;border-radius:0;border:0}
+.views:-webkit-full-screen{height:100%;width:100%;border-radius:0;border:0}
+.views.fs.pseudo{position:fixed;inset:0;z-index:40;height:auto;min-height:0;border-radius:0;border:0;padding-top:env(safe-area-inset-top,0px)}
+.views.fs .fsbtn{display:none}
+.views.fs.haspano #pano{flex:1;border-bottom:0}
+.views.fs.haspano .mapwrap{position:absolute;right:max(12px,env(safe-area-inset-right,0px));top:calc(12px + env(safe-area-inset-top,0px));width:min(32vw,300px);height:min(30vh,220px);border-radius:10px;overflow:hidden;border:2px solid var(--surface);box-shadow:0 4px 16px rgba(0,0,0,.35);z-index:3}
+.views.fs.haspano .mapctl,.views.fs.haspano .legend{display:none}
+.views.fs .legend{display:none}
+.hud{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom,0px));width:min(720px,calc(100% - 24px));z-index:5;border-radius:14px;border:1px solid color-mix(in srgb,var(--line) 70%,transparent);background:color-mix(in srgb,var(--surface) var(--hud-a,78%),transparent);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);box-shadow:0 8px 28px rgba(0,0,0,.28);padding:10px 14px 14px;max-height:min(58vh,560px);overflow:auto}
+.hudbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.hudtitle{font:500 12px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:auto}
+.hb{height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:color-mix(in srgb,var(--surface-2) 85%,transparent);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.hb svg{width:16px;height:16px}
+.hudbody .sign,.hudbody .sign svg{width:40px;height:40px;flex-basis:40px}
+.hudbody h2{font-size:17px}
+.hudbody .tip{background:color-mix(in srgb,var(--surface-2) 80%,transparent);font-size:13.5px}
+.hudbody .svact{display:none}
+.hud.min{padding-bottom:10px}
+.hud.min .hudbar{margin-bottom:4px}
+.hud.min .hudbody .more,.hud.min .hudbody .verdict+p{display:none}
+.hud.min .hudbody .cardtop .sign{display:none}
+@media (max-width:600px){.hud{max-height:62vh;padding:8px 10px 10px}.views.fs.haspano .mapwrap{width:38vw;height:22vh}.hudbody .answers button{height:54px}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -148,8 +173,18 @@ code{font-family:var(--f-mono);font-size:.92em;background:var(--surface-2);paddi
 
   <main>
     <section class="stage" aria-label="Карта маршруту">
-      <div class="views">
+      <div class="views" id="views">
         <div id="pano" hidden></div>
+        <button class="fsbtn" id="fsbtn" aria-label="На весь екран" title="На весь екран"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <div class="hud" id="hud" hidden aria-live="polite">
+          <div class="hudbar">
+            <span class="hudtitle" id="hudtitle"></span>
+            <button class="hb" id="hudplay"></button>
+            <button class="hb" id="hudmin">Згорнути</button>
+            <button class="hb" id="hudexit" aria-label="Вийти з повного екрана"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>Вийти</button>
+          </div>
+          <div class="card hudbody" id="hudbody"></div>
+        </div>
         <div class="mapwrap">
           <canvas id="map" aria-label="Карта Первомайська з маршрутом"></canvas>
           <div class="mapctl">
@@ -398,32 +433,41 @@ function approachText(st){
   const x=(st.at||[]).filter(n=>n!=='проїзд').join(', ');
   return `Ви на ${esc(st.frm)}. Попереду ${st.kind==='uturn'?'місце розвороту':'перехрестя'}${x?' з '+esc(x):''}.`;
 }
-function renderCard(){
-  const el=$('card'),R=S.r,st=S.await||S.shown;
-  if(!st){el.innerHTML=`<div class="cardtop"><div class="sign">${SIGN.flag}</div><div><div class="eyebrow">Готові</div><h2>Натисніть «Їхати»</h2></div></div><p>Авто поїде маршрутом і перед кожним маневром зупиниться з питанням. Кроки можна перемикати кнопками ⏮ ⏭ або клацнувши точку в списку.</p>`;return}
+function cardHTML(){
+  const R=S.r,st=S.await||S.shown;
+  if(!st)return `<div class="cardtop"><div class="sign">${SIGN.flag}</div><div><div class="eyebrow">Готові</div><h2>Натисніть «Їхати»</h2></div></div><p class="more">Авто поїде маршрутом і перед кожним маневром зупиниться з питанням. Кроки можна перемикати кнопками ⏮ ⏭ або клацнувши точку в списку.</p>`;
   const ll=st.sv||st.ll;const sv=`<a class="sv" href="${svUrl(ll[0],ll[1],st.hd)}" target="_blank" rel="noopener">${SVICON}Street View</a>`;
   if(st.kind==='finish'&&!S.await){const tot=R.quiz.length,ok=R.quiz.filter(q=>S.ans[q.num]===true).length;
-    el.innerHTML=`<div class="cardtop"><div class="sign">${SIGN.finish}</div><div><div class="eyebrow">Маршрут № ${R.id} пройдено</div><h2>${esc(st.title)}</h2></div></div>
+    return `<div class="cardtop"><div class="sign">${SIGN.finish}</div><div><div class="eyebrow">Маршрут № ${R.id} пройдено</div><h2>${esc(st.title)}</h2></div></div>
     <div class="summary"><span class="big">${ok} / ${tot}</span><span>правильних відповідей з першої спроби</span></div>
-    <div class="tip"><b>Порада</b>${esc(st.tip)}</div>
-    <div class="cardact"><button class="btn primary" id="again">Пройти ще раз</button>${R.id<ROUTES.length?`<button class="btn" id="nextroute">Маршрут № ${R.id+1}</button>`:''}</div>`;
-    $('again').onclick=()=>selectRoute(R.id,true);if($('nextroute'))$('nextroute').onclick=()=>selectRoute(R.id+1,true);return}
+    <div class="tip more"><b>Порада</b>${esc(st.tip)}</div>
+    <div class="cardact"><button class="btn primary" data-act="again">Пройти ще раз</button>${R.id<ROUTES.length?`<button class="btn" data-act="nextroute">Маршрут № ${R.id+1}</button>`:''}</div>`}
   const head=st.quiz?`Питання ${st.num} / ${R.quiz.length}`:(st.kind==='rail'?'Попереду':st.kind==='minor'?'Дорогою':'');
   if(S.await&&S.quiz&&st.quiz&&S.ans[st.num]===undefined){
-    const opts=st.kind==='roundabout'||st.answer==='uturn'?['left','straight','right','uturn']:['left','straight','right','uturn'];
-    el.innerHTML=`<div class="cardtop"><div class="sign">${st.prio&&SIGN[st.prio]?SIGN[st.prio]:st.kind==='roundabout'?SIGN.roundabout:SIGN.minor}</div><div><div class="eyebrow">${head}</div><h2>${approachText(st)}</h2></div></div>
+    const opts=['left','straight','right','uturn'];
+    return `<div class="cardtop"><div class="sign">${st.prio&&SIGN[st.prio]?SIGN[st.prio]:st.kind==='roundabout'?SIGN.roundabout:SIGN.minor}</div><div><div class="eyebrow">${head}</div><h2>${approachText(st)}</h2></div></div>
      <p class="ask">Що робимо далі?</p><div class="answers">${opts.map(o=>`<button data-a="${o}">${ARROW[o]}${WORD[o]}</button>`).join('')}</div>
-     <div class="cardact">${sv}</div>`;
-    el.querySelectorAll('.answers button').forEach(b=>b.onclick=()=>answer(b.dataset.a));return}
+     <div class="cardact svact">${sv}</div>`}
   const res=st.quiz?S.ans[st.num]:undefined;
   let verdict='';if(st.quiz&&S.quiz&&res!==undefined)verdict=res?`<div class="verdict ok">Правильно: ${WORD[st.answer].toLowerCase()}.</div>`:`<div class="verdict bad">Не так. Правильно: ${WORD[st.answer].toLowerCase()}.</div>`;
-  const cont=S.await?`<button class="btn primary" id="cont">Далі <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg></button>`:'';
-  el.innerHTML=`<div class="cardtop"><div class="sign">${signFor(st)}</div><div><div class="eyebrow">${head}</div><h2>${esc(st.title)}</h2></div></div>
-   ${verdict}<p>${esc(st.text)}</p><div class="tip"><b>Що пам'ятати</b>${esc(st.tip)}</div><div class="cardact">${cont}${sv}</div>`;
-  if($('cont'))$('cont').onclick=resume;
+  const cont=S.await?`<button class="btn primary" data-act="cont">Далі <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg></button>`:'';
+  return `<div class="cardtop"><div class="sign">${signFor(st)}</div><div><div class="eyebrow">${head}</div><h2>${esc(st.title)}</h2></div></div>
+   ${verdict}<p class="more">${esc(st.text)}</p><div class="tip more"><b>Що пам'ятати</b>${esc(st.tip)}</div><div class="cardact">${cont}<span class="svact">${sv}</span></div>`;
 }
+function renderCard(){
+  const h=cardHTML();$('card').innerHTML=h;
+  if(FS.on){const asking=!!(S.await&&S.quiz&&S.await.quiz&&S.ans[S.await.num]===undefined);
+    if(asking||S.await)FS.min=false;
+    $('hudbody').innerHTML=h;$('hud').classList.toggle('min',FS.min);
+    $('hudmin').textContent=FS.min?'Показати':'Згорнути';
+    $('hudplay').innerHTML=S.playing?'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>Пауза':'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>'+(S.d>=S.r.L?'Знову':'Їхати');
+    $('hudplay').hidden=asking||!!S.await}
+}
+document.addEventListener('click',e=>{const a=e.target.closest('[data-a]');if(a&&!a.disabled&&a.closest('.answers')){answer(a.dataset.a);return}
+  const b=e.target.closest('[data-act]');if(!b)return;const R=S.r;
+  if(b.dataset.act==='cont')resume();else if(b.dataset.act==='again')selectRoute(R.id,true);else if(b.dataset.act==='nextroute')selectRoute(R.id+1,true)});
 function answer(a){const st=S.await;if(!st)return;const ok=a===st.answer;S.ans[st.num]=ok;updateScore();
-  renderCard();const btns=$('card').querySelectorAll('.answers button');btns.forEach(b=>{b.disabled=true});renderList();dirty=true;
+  renderCard();renderList();dirty=true;
   if(ok&&S.r.quiz.every(q=>S.ans[q.num]!==undefined))saveBest()}
 function saveBest(){const R=S.r;const ok=R.quiz.filter(q=>S.ans[q.num]===true).length;const best=store.get('best',{});if(!best[R.id]||ok>best[R.id])best[R.id]=ok;store.set('best',best);renderPlates()}
 function resume(){S.await=null;S.hold=0;setPlaying(true);renderCard()}
@@ -443,7 +487,7 @@ $('prev').onclick=()=>{const R=S.r;const cur=S.await||S.shown;let k=cur?R.keys.i
 $('next').onclick=()=>{const R=S.r;const cur=S.await||S.shown;let k=cur?R.keys.indexOf(cur):-1;if(k<0)k=R.keys.findIndex(s=>s.dd>S.d+APPROACH)-1;jumpTo(R.keys[Math.min(R.keys.length-1,k+1)])};
 
 /* ---------- play loop ---------- */
-function setPlaying(v){S.playing=v;$('playlabel').textContent=v?'Пауза':(S.d>=S.r.L?'Знову':'Їхати');$('playicon').innerHTML=v?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4v16l13-8z"/>'}
+function setPlaying(v){S.playing=v;if(FS.on)setTimeout(renderCard,0);$('playlabel').textContent=v?'Пауза':(S.d>=S.r.L?'Знову':'Їхати');$('playicon').innerHTML=v?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4v16l13-8z"/>'}
 $('play').onclick=()=>{if(S.await&&S.quiz&&S.await.quiz&&S.ans[S.await.num]===undefined)return;if(S.d>=S.r.L){selectRoute(S.r.id,true);setPlaying(true);return}if(S.await){resume();return}setPlaying(!S.playing)};
 document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{S.speed=+b.dataset.sp;document.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
 $('quizmode').onchange=e=>{S.quiz=e.target.checked;renderList();renderCard()};
@@ -479,6 +523,26 @@ function selectRoute(id,reset){const R=ROUTES.find(r=>r.id===id);S.r=R;S.d=0;S.p
   if(W){if(S.follow){view.s=Math.max(view.s,0.9);centerCar()}else fitRoute()}
   store.set('route',id);dirty=true;svUpdate(true)}
 
+
+/* ---------- fullscreen with question overlay ---------- */
+const FS={on:false,min:false,pseudo:false};
+const VW=$('views');
+function fsElement(){return document.fullscreenElement||document.webkitFullscreenElement}
+function applyFs(on,pseudo){FS.on=on;FS.pseudo=!!pseudo;VW.classList.toggle('fs',on);VW.classList.toggle('pseudo',on&&!!pseudo);$('hud').hidden=!on;
+  document.body.style.overflow=on&&pseudo?'hidden':'';
+  if(on){FS.min=false;$('hudtitle').textContent=`Маршрут № ${S.r.id}`;renderCard();if(!S.follow)setFollow(true)}
+  setTimeout(()=>{resize();if(S.follow)centerCar();dirty=true},60)}
+function enterFs(){const req=VW.requestFullscreen||VW.webkitRequestFullscreen;
+  if(req){try{const p=req.call(VW);if(p&&p.then)p.then(()=>{},()=>applyFs(true,true));return}catch(e){}}
+  applyFs(true,true)}
+function exitFs(){if(fsElement()){(document.exitFullscreen||document.webkitExitFullscreen).call(document)}else applyFs(false)}
+document.addEventListener('fullscreenchange',()=>applyFs(!!fsElement(),false));
+document.addEventListener('webkitfullscreenchange',()=>applyFs(!!fsElement(),false));
+$('fsbtn').onclick=enterFs;$('hudexit').onclick=exitFs;
+$('hudmin').onclick=()=>{FS.min=!FS.min;renderCard()};
+$('hudplay').onclick=()=>$('play').click();
+addEventListener('keydown',e=>{if(e.key==='Escape'&&FS.pseudo)applyFs(false);if((e.key==='f'||e.key==='а')&&!e.target.closest('input')){FS.on?exitFs():enterFs()}});
+
 /* ---------- keyboard ---------- */
 addEventListener('keydown',e=>{if(e.target.closest('input,textarea')||!$('settings').hidden)return;
   if(S.await&&S.quiz&&S.await.quiz&&S.ans[S.await.num]===undefined){const m={ArrowLeft:'left',ArrowUp:'straight',ArrowRight:'right',ArrowDown:'uturn'}[e.key];if(m){e.preventDefault();answer(m);return}}
@@ -506,9 +570,9 @@ async function initPano(){
     if(loads()>=G.limit){svNote(`Денний ліміт вбудованих панорам (${G.limit}) вичерпано. До завтра Street View відкривається кнопкою в Google Maps.`);G.busy=false;return}
     const lib=await google.maps.importLibrary('streetView');
     store.set('gl-'+today(),loads()+1);quotaText();
-    $('pano').hidden=false;resize();
+    $('pano').hidden=false;VW.classList.add('haspano');resize();
     G.svc=new lib.StreetViewService();
-    G.pano=new lib.StreetViewPanorama($('pano'),{addressControl:false,fullscreenControl:true,motionTracking:false,motionTrackingControl:false,zoomControl:false,panControl:false,showRoadLabels:true,linksControl:true});
+    G.pano=new lib.StreetViewPanorama($('pano'),{addressControl:false,fullscreenControl:false,motionTracking:false,motionTrackingControl:false,zoomControl:false,panControl:false,showRoadLabels:true,linksControl:true});
     G.ready=true;gstatus('Вбудований Street View увімкнено.','ok');svNote(`Вбудована панорама активна. Сьогодні: ${loads()} з ${G.limit}.`);svUpdate(true)
   }catch(e){G.failed='Помилка Street View: '+(e&&e.message||e);gstatus(G.failed,'bad');svNote(G.failed)}
   G.busy=false}
