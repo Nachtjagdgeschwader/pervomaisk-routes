@@ -223,6 +223,25 @@ body:not(.manual) .manual-only{display:none!important}
 .sit.train .si circle:first-of-type{animation:blink .7s steps(1) infinite}
 .sit.train .si .alt{animation:blink .7s steps(1) infinite .35s}
 @media (max-width:600px){.sit{font-size:13px}.sit .si,.sit .si svg{width:30px;height:30px;flex-basis:30px}}
+
+.gears{display:grid;grid-template-columns:1.6fr repeat(3,1fr);gap:6px}
+.gears button{min-height:46px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 15px var(--f-body);touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.gears button[data-m^="g"]{font:700 18px var(--f-mono)}
+.gears kbd{font:500 10.5px var(--f-mono);color:var(--muted)}
+.gears button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.gears button[aria-pressed="true"] kbd{color:inherit;opacity:.75}
+.pad .brk[aria-pressed="true"]{background:var(--brake);border-color:var(--brake);color:#fff}
+.pad .brk[aria-pressed="true"] kbd{color:#fff}
+.ind.gearind{font:700 20px var(--f-mono);color:var(--ink)}
+.ind.clind{font:700 15px var(--f-mono);color:var(--lamp-off)}
+.ind.clind.on{color:var(--route);border-color:var(--route)}
+.sit.ok{background:rgba(22,64,40,.82)}
+.sit{animation:sitin .25s ease-out}
+@keyframes sitin{from{opacity:0;transform:translateY(-6px)}}
+.hud.min .hudbody .gears{display:none}
+.ind.eng .lamp{fill:var(--lamp-off)}
+.ind.eng.on .lamp{fill:#e03131}
+.ind.eng.on{border-color:#e03131;animation:blink 1.2s steps(1) infinite}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -285,6 +304,7 @@ body:not(.manual) .manual-only{display:none!important}
         </div>
         <label class="switch auto-only"><input type="checkbox" id="quizmode" checked> Самоперевірка: зупинятися й питати, що робимо</label>
         <label class="switch"><input type="checkbox" id="evmode" checked> Дорожні події: світлофори, пішоходи, переїзд</label>
+        <label class="switch manual-only"><input type="checkbox" id="gearmode" checked> Механіка: зчеплення й передачі (N, 1, 2)</label>
       </div>
 
       <div class="panel card" id="card" aria-live="polite"></div>
@@ -416,8 +436,8 @@ function project(R,x,y,d0,d1){const p=R.xy,c=R.cum;let best=null;
   return best}
 
 /* ---------- state ---------- */
-const S={haz:[],held:null,events:store.get('events',true)!==false,r:null,d:0,vis:0,playing:false,speed:1,quiz:true,await:null,shown:null,ans:{},hold:0,follow:true,passed:-1,mode:store.get('mode','auto')==='manual'?'manual':'auto'};
-const freshMan=()=>({blink:null,blinkD:0,brakeD:-1e9,brakeT:-1e9,err:null,errors:[],done:false,busy:false,ei:0,lastPass:0,lastStep:0,started:false});
+const S={gears:store.get('gears',true)!==false,haz:[],held:null,events:store.get('events',true)!==false,r:null,d:0,vis:0,playing:false,speed:1,quiz:true,await:null,shown:null,ans:{},hold:0,follow:true,passed:-1,mode:store.get('mode','auto')==='manual'?'manual':'auto'};
+const freshMan=()=>({engine:true,brakeOn:S.gears,clutch:false,gear:'N',stationary:true,d1:0,long1:false,longT:0,longDone:false,blink:null,blinkD:0,brakeD:-1e9,brakeT:-1e9,err:null,errors:[],done:false,busy:false,ei:0,lastPass:0,lastStep:0,started:false});
 let MAN=freshMan();
 const cv=$('map'),ctx=cv.getContext('2d');let W=0,H=0,DPR=1;
 const view={cx:0,cy:0,s:0.3};
@@ -562,12 +582,19 @@ function autoCardHTML(){
 }
 
 /* ---------- manual mode card ---------- */
+const GEARS=`<div class="gears manual-gears" role="group" aria-label="Зчеплення й передачі">
+ <button class="clutch" data-m="clutch" aria-pressed="false">Зчеплення<kbd>C</kbd></button>
+ <button data-m="g0" aria-pressed="true">N<kbd>0</kbd></button>
+ <button data-m="g1" aria-pressed="false">1<kbd>1</kbd></button>
+ <button data-m="g2" aria-pressed="false">2<kbd>2</kbd></button>
+</div>`;
+const ENG_I='<svg viewBox="0 0 32 32"><path class="lamp" d="M7 12h3v-2h5V8h-4V6h10v2h-4v2h5l3 3h2v-2h2v10h-2v-2h-2v4l-3 3H11l-4-4h-2v3H3v-9h2v3h2z"/></svg>';
 const PAD=`<div class="pad" role="group" aria-label="Керування">
  <button class="blb" data-m="blinkL" aria-pressed="false" aria-label="Лівий покажчик повороту">${CUE_BL_L.replace('#2fd16a','currentColor')}<kbd>Q</kbd></button>
  <button class="fwd" data-m="fwd">${ARROW.straight}Вперед<kbd>W · ↑</kbd></button>
  <button class="blb" data-m="blinkR" aria-pressed="false" aria-label="Правий покажчик повороту">${CUE_BL_R.replace('#2fd16a','currentColor')}<kbd>E</kbd></button>
  <button data-m="left">${ARROW.left}Ліворуч<kbd>A · ←</kbd></button>
- <button class="brk" data-m="brake">${CUE_BRAKE.replace(/#ffb020/g,'currentColor')}Гальмо<kbd>Пробіл</kbd></button>
+ <button class="brk" data-m="brake" aria-pressed="false">${CUE_BRAKE.replace(/#ffb020/g,'currentColor')}Гальмо<kbd>Пробіл</kbd></button>
  <button data-m="right">${ARROW.right}Праворуч<kbd>D · →</kbd></button>
  <button class="ut" data-m="uturn">${ARROW.uturn}Розворот<kbd>S · ↓</kbd></button>
 </div>`;
@@ -583,18 +610,24 @@ function manualCardHTML(){
      <div class="summary"><span class="big">${n}</span><span>${n===1?'помилка':n>=2&&n<=4?'помилки':'помилок'}</span></div>
      ${n?`<ul class="errlist">${MAN.errors.map(x=>`<li><b>${esc(x.t)}</b><span>${(x.d/1000).toFixed(2)} км</span></li>`).join('')}</ul>`:''}
      <div class="cardact"><button class="btn primary" data-act="again">Ще раз</button>${R.id<ROUTES.length?`<button class="btn" data-act="nextroute">Маршрут № ${R.id+1}</button>`:''}</div>`}
-  return `<div class="dash"><span class="ind bl" data-ind="L">${BLINK_L}</span><span class="ind br" data-ind="B">${BRAKE_I}</span><span class="ind bl" data-ind="R">${BLINK_R}</span><span class="dstat"></span></div>
-   ${PAD}
-   <p class="mhelp">${G.ready?'Кожне натискання «Вперед» = один крок панорами.':'Без ключа Google замість панорами показується карта без маршруту.'} Підказок немає: при помилці авто зупиниться. Дорожні події (світлофор, пішоходи, поїзд) з'являються над панорамою чи картою.</p>`;
+  return `<div class="dash"><span class="ind bl" data-ind="L">${BLINK_L}</span><span class="ind br" data-ind="B">${BRAKE_I}</span><span class="ind bl" data-ind="R">${BLINK_R}</span>${S.gears?'<span class="ind gearind" data-ind="G">N</span><span class="ind clind" data-ind="C">C</span><span class="ind eng" data-ind="E" title="Двигун">'+ENG_I+'</span>':''}<span class="dstat"></span></div>
+   ${PAD}${S.gears?GEARS:''}
+   <p class="mhelp">${S.gears?'Рушання: C, 1, відпустити гальмо (Пробіл), відпустити C, W. Зупинка: C, потім гальмо. ':''}${G.ready?'Кожне натискання «Вперед» = один крок панорами.':'Без ключа Google замість панорами показується карта без маршруту.'} Підказок немає: при помилці авто зупиниться.</p>`;
 }
 function updateDash(){
-  const now=performance.now();const brk=now-MAN.brakeT<650;
+  const brk=MAN.brakeOn;
   for(const root of [$('card'),$('hudbody')]){if(!root)continue;
     root.querySelectorAll('[data-ind="L"]').forEach(e=>e.classList.toggle('on',MAN.blink==='left'));
     root.querySelectorAll('[data-ind="R"]').forEach(e=>e.classList.toggle('on',MAN.blink==='right'));
     root.querySelectorAll('[data-ind="B"]').forEach(e=>e.classList.toggle('on',brk));
     root.querySelectorAll('[data-m="blinkL"]').forEach(e=>e.setAttribute('aria-pressed',MAN.blink==='left'));
     root.querySelectorAll('[data-m="blinkR"]').forEach(e=>e.setAttribute('aria-pressed',MAN.blink==='right'));
+    root.querySelectorAll('[data-m="brake"]').forEach(e=>e.setAttribute('aria-pressed',MAN.brakeOn));
+    root.querySelectorAll('[data-m="clutch"]').forEach(e=>e.setAttribute('aria-pressed',MAN.clutch));
+    root.querySelectorAll('[data-ind="C"]').forEach(e=>e.classList.toggle('on',MAN.clutch));
+    root.querySelectorAll('[data-ind="E"]').forEach(e=>{e.classList.toggle('on',!MAN.engine);e.title=MAN.engine?'Двигун працює':'Двигун заглух'});
+    root.querySelectorAll('[data-ind="G"]').forEach(e=>e.textContent=MAN.gear);
+    for(const g of ['0','1','2'])root.querySelectorAll(`[data-m="g${g}"]`).forEach(e=>e.setAttribute('aria-pressed',MAN.gear===(g==='0'?'N':g)));
     root.querySelectorAll('.dstat').forEach(e=>e.textContent=`${(S.d/1000).toFixed(2)} / ${(S.r.L/1000).toFixed(2)} км · помилок ${MAN.errors.length}`)}
 }
 
@@ -685,13 +718,16 @@ function makeHazards(R){if(!S.events)return [];const H=[];
     if(s.kind==='rail')H.push({type:'train',at:s.dd-6});
   }
   for(const d of R.xd)if(!H.some(h=>h.type!=='pedturn'&&Math.abs(h.at-d)<8))H.push({type:'ped',at:d-3});
-  for(const h of H){const c=HZ[h.type];h.vis=c.vis;h.wait=c.wait*TS;h.occurs=Math.random()<c.p;h.state='idle';h.stopT=null}
+  H.sort((a,b)=>a.at-b.at);let lastPed=-1e9;
+  H.forEach((h,k)=>{const c=HZ[h.type];h.id=k;h.vis=c.vis;h.wait=c.wait*TS;h.occurs=Math.random()<c.p;h.state='idle';h.stopT=null;
+    if(h.type==='ped'||h.type==='pedturn'){if(h.occurs&&h.at-lastPed<100)h.occurs=false;if(h.occurs)lastPed=h.at}});
   return H.sort((a,b)=>a.at-b.at)}
 function blocking(h){return h.type==='light'?(h.state==='on'&&h.light!=='green'):h.state==='active'}
 function visibleHaz(h){return (h.state==='on'||h.state==='active')&&S.d>=h.at-h.vis}
 function updHaz(now){
   let changed=false;
   for(const h of S.haz){
+    if(h.state==='clear'&&h.clearT&&now-h.clearT>1800){h.clearT=0;changed=true}
     if(h.state==='passed'||h.state==='none')continue;
     if(S.d>h.at+3){h.state='passed';changed=true;continue}
     if(h.state==='idle'){if(S.d>=h.at-h.vis){changed=true;h.shownD=S.d;h.t0=now;
@@ -699,8 +735,8 @@ function updHaz(now){
       continue}
     if(h.type==='light'){if(h.light==='yellow'&&now-h.t0>2500*TS){h.light='red';h.t0=now;changed=true}else if(h.light==='red'&&now-h.t0>7000*TS){h.light='green';changed=true}continue}
     if(h.state==='active'){
-      const stopped=S.mode==='manual'?(MAN.brakeD===S.d&&S.d>=h.at-45&&S.d<=h.at+0.5):S.held===h;
-      if(stopped){if(!h.stopT)h.stopT=now;if(now-h.stopT>=h.wait*1000){h.state='clear';changed=true}}else h.stopT=null}
+      const stopped=S.mode==='manual'?(MAN.brakeOn&&S.d>=h.at-45&&S.d<=h.at+0.5):S.held===h;
+      if(stopped){if(!h.stopT)h.stopT=now;if(now-h.stopT>=h.wait*1000){h.state='clear';h.clearT=now;changed=true}}else h.stopT=null}
   }
   if(changed){renderSits();dirty=true;cueKey=''}
 }
@@ -727,10 +763,12 @@ function cueFor(h){switch(h.type){
 let sitKey='';
 function renderSits(){const el=$('sits');if(!el)return;
   const show=S.r&&!(FS.on&&S.mode==='auto');
-  const list=show?S.haz.filter(visibleHaz):[];
-  const key=list.map(h=>h.type+(h.light||'')).join('|');if(key===sitKey)return;sitKey=key;
+  const list=show?S.haz.filter(h=>visibleHaz(h)||(h.state==='clear'&&h.clearT)):[];
+  const key=list.map(h=>h.id+h.state+(h.light||'')).join('|');if(key===sitKey)return;sitKey=key;
   el.hidden=!list.length;
-  el.innerHTML=list.map(h=>`<div class="sit${h.type==='train'?' train':''}"><span class="si">${sitIcon(h)}</span><b>${sitText(h)}</b></div>`).join('')}
+  el.innerHTML=list.map(h=>h.state==='clear'?`<div class="sit ok"><span class="si">${OK_I}</span><b>${CLEARTXT[h.type]}</b></div>`:`<div class="sit${h.type==='train'?' train':''}"><span class="si">${sitIcon(h)}</span><b>${sitText(h)}</b></div>`).join('')}
+const OK_I='<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#2c9a5a"/><path d="M11 20.5l6 6 12-13" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CLEARTXT={ped:'Пішохід перейшов дорогу',pedturn:'Пішоходи перейшли',car:'Авто на головній проїхало',oncoming:'Зустрічне авто проїхало',train:'Поїзд пройшов, переїзд відкрито',light:''};
 const HERR={
  light:h=>({t:'Проїзд на заборонний сигнал світлофора',x:'Червоний сигнал, а також жовтий, забороняє рух. Зупиніться перед стоп-лінією (якщо її немає, перед світлофором чи перехрестям) і рушайте лише на зелений.'}),
  ped:h=>({t:'Не пропустили пішохода',x:'Наближаючись до нерегульованого пішохідного переходу, на якому є пішоходи, водій повинен знизити швидкість, а за потреби зупинитися й дати їм дорогу (ПДР, п. 18.1).'}),
@@ -758,11 +796,41 @@ const ERR={
  noBrakeRound:()=>({t:'Не пригальмували перед кільцем',x:'Перед в\'їздом на перехрестя з круговим рухом знизьте швидкість і пропустіть транспорт, що вже рухається по колу, якщо там стоїть знак 2.1.'}),
  blinkStraight:(b)=>({t:'Увімкнено покажчик, а ви їдете прямо',x:`Увімкнений ${SIDE[b]} покажчик вводить в оману: інші чекають, що ви повернете. Якщо не повертаєте, вимкніть його.`}),
  noBrakeRail:()=>({t:'Не знизили швидкість перед переїздом',x:'Перед залізничним переїздом знизьте швидкість і переконайтеся, що потяга немає. Натисніть «Гальмо» до переїзду.'}),
+ blinkEarly:b=>({t:'Покажчик увімкнено зарано',x:`Ви їдете з увімкненим ${SIDE[b]} покажчиком, а маневру поруч немає. Сигнал, поданий задовго, вводить інших в оману: вони чекають повороту на найближчому перехресті. У місті вмикайте покажчик приблизно за 50–100 м до маневру.`}),
+ blinkWrongAhead:b=>({t:'Покажчик увімкнено не в той бік',x:`Увімкнено ${SIDE[b]} покажчик, але найближчий маневр за маршрутом в інший бік. Такий сигнал вводить інших в оману.`}),
+ blinkMinor:b=>({t:'Проїзд перехрестя з увімкненим покажчиком',x:`Ви проїхали перехрестя прямо з увімкненим ${SIDE[b]} покажчиком. Інші водії й пішоходи могли чекати, що ви повернете саме тут. Вмикайте покажчик після попереднього перехрестя, ближче до місця повороту.`}),
+ stallStop:()=>({t:'Двигун заглух',x:'Ви зупинилися на увімкненій передачі, не витиснувши зчеплення. Перед повною зупинкою витисніть зчеплення (C), а вже потім гальмуйте. Щоб завести двигун, витисніть і відпустіть зчеплення.'}),
+ stallClutch:()=>({t:'Двигун заглух',x:'Ви відпустили зчеплення на увімкненій передачі, коли авто стоїть на гальмі. Спершу відпустіть гальмо, а потім плавно відпускайте зчеплення. Щоб завести двигун, витисніть і відпустіть зчеплення.'}),
+ gearNoClutch:()=>({t:'Перемикання передачі без зчеплення',x:'Передачу перемикають лише з повністю витиснутим зчепленням (C). Інакше коробка передач «хрустить» і зношується.'}),
+ moveOff2:()=>({t:'Рушання з місця на другій передачі',x:'З місця рушають на першій передачі. На другій авто смикається або глухне. Витисніть зчеплення й увімкніть першу (1).'}),
+ long1:()=>({t:'Тривалий рух на першій передачі',x:'Після розгону, приблизно через 10–20 м, перемкніться на другу передачу (C, 2, відпустити C). Тривалий рух на першій перевантажує двигун.'}),
+ longStop:()=>({t:'Тривала зупинка на передачі',x:'Під час тривалої зупинки (червоний сигнал, закритий переїзд) увімкніть нейтральну передачу (N) і відпустіть зчеплення. Перед рушанням знову витисніть зчеплення й увімкніть першу.'}),
  noStop:()=>({t:'Не зупинилися перед знаком STOP',x:'Перед знаком 2.2 «Проїзд без зупинки заборонено» обов\'язкова повна зупинка біля стоп-лінії, а якщо її немає, біля знака. Натисніть «Гальмо» безпосередньо перед переїздом.'})
 };
 let toastT=0;
 function toast(t){const el=$('toast');el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,1800)}
 function flash(m){$$(`[data-m="${m}"]`).forEach(b=>{b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),140)})}
+function blinkBad(){
+  const ev=S.r.events;let nt=null;
+  for(let i=MAN.ei;i<ev.length;i++){const x=ev[i];if(x.dd<S.d-3)continue;if(x.kind==='rail')continue;
+    if(x.quiz&&(x.answer!=='straight'||x.kind==='roundabout')){nt=x;break}
+    if(x.kind==='finish')break;
+    return null}  // a junction comes first: checked when the car passes it
+  if(!nt)return ERR.blinkEarly(MAN.blink);
+  const far=nt.dd-S.d>120;
+  if(nt.kind==='roundabout')return far?ERR.blinkEarly(MAN.blink):null;
+  const side=nt.answer==='right'?'right':'left';
+  if(side!==MAN.blink)return far?ERR.blinkEarly(MAN.blink):ERR.blinkWrongAhead(MAN.blink);
+  return far?ERR.blinkEarly(MAN.blink):null}
+function cantMove(){
+  if(S.gears&&!MAN.engine)return 'Двигун заглух. Витисніть і відпустіть зчеплення (C), щоб завести.';
+  if(MAN.brakeOn)return 'Авто на гальмі. Відпустіть гальмо (Пробіл).';
+  if(S.gears){if(MAN.clutch)return 'Витиснуто зчеплення. Відпустіть його (C).';if(MAN.gear==='N')return 'Увімкнено нейтраль. Витисніть зчеплення й увімкніть передачу.'}
+  return null}
+function moveOffBad(){if(S.gears&&MAN.stationary&&MAN.gear==='2'){manError({gearErr:true,at:S.d},[ERR.moveOff2()],[]);return true}return false}
+function moved(dist){if(MAN.stationary)MAN.d1=0;MAN.stationary=false;MAN.longT=0;
+  if(S.gears&&MAN.gear==='1'){MAN.d1+=dist;if(MAN.d1>60&&!MAN.long1){MAN.long1=true;manError({gearErr:true,at:S.d},[ERR.long1()],[]);return true}}
+  return false}
 function braked(from){return MAN.brakeD>=from-0.1&&MAN.brakeD<=S.d+0.1}
 function nextEvent(){const ev=S.r.events;while(MAN.ei<ev.length&&ev[MAN.ei].dd<S.d-3)MAN.ei++;return ev[MAN.ei]||null}
 function manAct(a,repeat){
@@ -772,16 +840,31 @@ function manAct(a,repeat){
   if(repeat)return;
   flash(a);
   if(a==='blinkL'||a==='blinkR'){const side=a==='blinkL'?'left':'right';MAN.blink=MAN.blink===side?null:side;MAN.blinkD=S.d;updateDash();return}
-  if(a==='brake'){MAN.brakeD=S.d;MAN.brakeT=performance.now();updateDash();setTimeout(updateDash,700);
+  if(a==='brake'){
+    if(MAN.brakeOn){MAN.brakeOn=false;updateDash();return}
+    MAN.brakeOn=true;MAN.brakeD=S.d;MAN.brakeT=performance.now();MAN.stationary=true;updateDash();
+    if(S.gears&&MAN.engine&&MAN.gear!=='N'&&!MAN.clutch){MAN.engine=false;updateDash();return manError({stall:true,at:S.d},[ERR.stallStop()],[])}
     const h=S.haz.find(h=>blocking(h)&&h.at-S.d>-0.5&&h.at-S.d<5&&h.shownD<=S.d-25&&!h.lateDone);
     if(h){h.lateDone=true;manError(h,[lateBrake(h)],[])}
     return}
+  if(a==='clutch'){if(!S.gears)return;
+    if(!MAN.clutch){MAN.clutch=true;updateDash();return}
+    MAN.clutch=false;
+    if(!MAN.engine){MAN.engine=true;updateDash();toast('Двигун заведено.');return}
+    updateDash();
+    if(MAN.gear!=='N'&&MAN.brakeOn){MAN.engine=false;updateDash();return manError({stall:true,at:S.d},[ERR.stallClutch()],[])}
+    return}
+  if(a==='g0'||a==='g1'||a==='g2'){if(!S.gears)return;const g=a==='g0'?'N':a.slice(1);
+    if(!MAN.clutch)return manError({gearErr:true,at:S.d},[ERR.gearNoClutch()],[]);
+    if(MAN.gear!==g){MAN.gear=g;MAN.d1=0;MAN.long1=false}updateDash();return}
   if(['left','right','uturn'].includes(a))return manTurn(a);
 }
 async function manForward(repeat){
   if(MAN.busy||G.stepping)return;const now=performance.now();if(!FAST&&now-MAN.lastStep<(G.ready?250:140))return;
   const R=S.r;const e=nextEvent();const reach=G.ready?12:STEP_M+2;
   if(!repeat)flash('fwd');
+  const cm=cantMove();if(cm){if(!repeat)toast(cm);return}
+  if(moveOffBad())return;
   MAN.lastStep=now;
   const hz=S.haz.find(h=>blocking(h)&&h.at>S.d-0.5);
   if(hz&&hz.at-S.d<=reach&&(!e||hz.at<=e.dd))return manError(hz,[HERR[hz.type](hz)],[hz]);
@@ -793,12 +876,15 @@ async function manForward(repeat){
     else nd=S.d+STEP_M;
     nd=Math.max(S.d+0.5,Math.min(nd,lim));
     if(S.mode!=='manual'||S.r!==R)return;
-    S.d=nd;updateProgress();updateDash();dirty=true;
+    const d0=S.d;S.d=nd;updateProgress();updateDash();dirty=true;
+    if(moved(nd-d0))return;
+    if(MAN.blink){const bad=blinkBad();if(bad)manError({blinkErr:true,at:S.d},[bad],[])}
   }finally{MAN.busy=false}
 }
 function passEvent(e){
   const R=S.r;const v=[];
   if(e.kind==='finish'){S.d=R.L;MAN.done=true;updateProgress();renderCard();dirty=true;return}
+  if(e.kind==='minor'&&MAN.blink)v.push(ERR.blinkMinor(MAN.blink));
   if(e.kind==='rail'){if(e.stop){if(!braked(e.dd-25))v.push(ERR.noStop())}else if(!braked(e.dd-60))v.push(ERR.noBrakeRail())}
   else if(e.quiz){
     if(e.answer!=='straight')return manError(e,[ERR.missed(e)]);
@@ -807,9 +893,11 @@ function passEvent(e){
   }
   const hb=hazIn(S.d,e.dd+12);for(const h of hb)v.push(HERR[h.type](h));
   if(v.length)return manError(e,v,hb);
+  if(e.kind!=='finish'&&moveOffBad())return;
   goPast(e);
 }
 function manTurn(dir){
+  const cm=cantMove();if(cm){toast(cm);return}
   const e=nextEvent();
   if(!e||e.kind==='rail'||e.kind==='finish'||e.dd-S.d>TURN_REACH){toast('Тут немає перехрестя. Під\'їдьте ближче.');return}
   if(!e.quiz||e.answer!==dir)return manError(e,[ERR.wrong(e,dir)]);
@@ -820,6 +908,7 @@ function manTurn(dir){
   }else if(!braked(e.dd-60))v.push(ERR.noBrakeRound());
   const hb=hazIn(S.d,(e.kind==='roundabout'?e.exitD+10:e.dd+12)+10);for(const h of hb)v.push(HERR[h.type](h));
   if(v.length)return manError(e,v,hb);
+  if(moveOffBad())return;
   goPast(e);
 }
 async function goPast(e){
@@ -835,20 +924,30 @@ async function goPast(e){
       else{const r=G.off||!G.cur?await svLocate(target,true):await linkStep(S.d,e.dd+15);nd=Math.max(target,r==null?target:r)}
     }
     if(S.mode!=='manual'||S.r!==R)return;
-    S.d=Math.min(R.L,nd);MAN.lastPass=S.d;updateProgress();renderCard();dirty=true;
+    const d0=S.d;S.d=Math.min(R.L,nd);MAN.lastPass=S.d;updateProgress();renderCard();dirty=true;
+    moved(turn?0:S.d-d0);
   }finally{MAN.busy=false}
 }
 function manError(e,v,haz){MAN.err={e,v,haz:haz||[]};for(const x of v)MAN.errors.push({t:x.t,d:S.d});updateScore();renderCard();if(navigator.vibrate)try{navigator.vibrate(120)}catch(_){}}
-function manRetry(){const e=MAN.err&&MAN.err.e;if(!e)return;const pos=e.dd!==undefined?e.dd:e.at;MAN.err=null;MAN.blink=null;MAN.brakeD=-1e9;
+function manRetry(){const e=MAN.err&&MAN.err.e;if(!e)return;
+  if(e.blinkErr){MAN.err=null;MAN.blink=null;renderCard();return}
+  if(e.stall){MAN.err=null;stalledNote();return}
+  if(e.gearErr){MAN.err=null;renderCard();return}
+  const pos=e.dd!==undefined?e.dd:e.at;MAN.err=null;MAN.blink=null;MAN.brakeD=-1e9;
   S.d=Math.max(MAN.lastPass,Math.min(S.d,pos-45));S.vis=S.d;if(e.dd!==undefined)MAN.ei=S.r.events.indexOf(e);
   for(const h of S.haz){if(h.at>S.d&&h.state==='active')h.stopT=null;if(h.at>S.d)h.lateDone=false}updateProgress();renderCard();if(S.follow)centerCar();dirty=true;if(G.ready)svShow(S.d)}
 function manFix(){const er=MAN.err;const e=er&&er.e;if(!e)return;MAN.err=null;
+  if(e.blinkErr){MAN.blink=null;renderCard();return}
+  if(e.stall){stalledNote();return}
+  if(e.gearErr){if(MAN.gear==='2'&&MAN.stationary)MAN.gear='1';if(MAN.gear==='1'&&MAN.long1)MAN.gear='2';renderCard();return}
   for(const h of er.haz){if(h.type==='light')h.light='green';else h.state='clear'}sitKey='';renderSits();
   if(e.dd===undefined){renderCard();return}
-  MAN.blink=null;
+  MAN.blink=null;MAN.brakeOn=false;if(S.gears){MAN.clutch=false;if(MAN.gear==='N')MAN.gear='1'}
   if(e.kind==='finish'){MAN.done=true;renderCard();return}
   if(e.quiz||e.kind==='rail')goPast(e);else{MAN.ei=S.r.events.indexOf(e)+1}renderCard()}
+function stalledNote(){MAN.stationary=true;MAN.d1=0;MAN.long1=false;renderCard();toast('Двигун заглух. Витисніть і відпустіть зчеплення (C), щоб завести.')}
 $('restart').onclick=()=>selectRoute(S.r.id);
+$('gearmode').checked=S.gears;$('gearmode').onchange=e=>{S.gears=e.target.checked;store.set('gears',S.gears);selectRoute(S.r.id)};
 $('evmode').checked=S.events;$('evmode').onchange=e=>{S.events=e.target.checked;store.set('events',S.events);selectRoute(S.r.id)};
 
 /* ---------- mode ---------- */
@@ -916,7 +1015,7 @@ addEventListener('keydown',e=>{
   if((lk==='f'||lk==='а')&&!e.repeat){FS.on?exitFs():enterFs();return}
   if(S.mode==='manual'){
     if(MAN.err){if(k==='Enter'){e.preventDefault();manFix()}else if(lk==='r'||lk==='к'){e.preventDefault();manRetry()}return}
-    const map={arrowup:'fwd',w:'fwd','ц':'fwd',arrowleft:'left',a:'left','ф':'left',arrowright:'right',d:'right','в':'right',arrowdown:'uturn',s:'uturn','і':'uturn','ы':'uturn',q:'blinkL','й':'blinkL',e:'blinkR','у':'blinkR',' ':'brake',b:'brake','и':'brake'};
+    const map={arrowup:'fwd',w:'fwd','ц':'fwd',arrowleft:'left',a:'left','ф':'left',arrowright:'right',d:'right','в':'right',arrowdown:'uturn',s:'uturn','і':'uturn','ы':'uturn',q:'blinkL','й':'blinkL',e:'blinkR','у':'blinkR',' ':'brake',b:'brake','и':'brake',c:'clutch','с':'clutch','0':'g0',n:'g0','т':'g0','1':'g1','2':'g2'};
     const a=map[lk];if(a){e.preventDefault();if(e.repeat&&a!=='fwd')return;manAct(a,e.repeat)}
     return}
   if(S.await&&S.quiz&&S.await.quiz&&S.ans[S.await.num]===undefined){const m={ArrowLeft:'left',ArrowUp:'straight',ArrowRight:'right',ArrowDown:'uturn'}[k];if(m){e.preventDefault();answer(m);return}}
@@ -977,13 +1076,18 @@ async function linkStep(d0,aimD){
 // jump to the panorama nearest to a point of the route (one screen update)
 async function svLocate(d,proj){
   const R=S.r,c=at(R,d),ll=toLL(c.x,c.y);
-  try{const {data}=await G.svc.getPanorama({location:{lat:ll[0],lng:ll[1]},radius:40,preference:'nearest',source:'outdoor'});
-    const pos=await showPano(data.location.pano,c.hd);svNote('');
+  try{let data=null;
+    for(const radius of [40,120,300]){try{data=(await G.svc.getPanorama({location:{lat:ll[0],lng:ll[1]},radius,preference:'nearest',source:'outdoor'})).data;break}catch(_){}}
+    if(!data)throw new Error('none');
+    const pl=data.location.latLng;let hd=c.hd;
+    if(pl){const plat=typeof pl.lat==='function'?pl.lat():pl.lat,plng=typeof pl.lng==='function'?pl.lng():pl.lng;const far=Math.hypot((plat-ll[0])*M,(plng-ll[1])*M*B.K);
+      if(far>25){const t=atXY(R,Math.min(R.L,d+60)),tl=toLL(t[0],t[1]);hd=bearingLL(plat,plng,tl[0],tl[1])}}
+    const pos=await showPano(data.location.pano,hd);svNote('');
     if(!pos)return d;const xy=fromLL(pos.lat,pos.lng),pr=project(R,xy[0],xy[1],d-30,d+30);
     G.off=!pr||pr.dist>20;return proj&&pr&&pr.dist<=20?pr.d:d}
-  catch(e){svNote('Поблизу немає панорами Google.');G.off=true;return d}}
+  catch(e){svNote('Поблизу немає панорами Google.');G.off=true;G.cur=null;return d}}
 let svShowSeq=0;
-async function svShow(d){if(!G.ready||!S.r)return;const my=++svShowSeq;G.stepping=true;try{await svLocate(d,false)}finally{if(my===svShowSeq){G.stepping=false;G.nextAt=performance.now()+STEP_MS/S.speed}}}
+async function svShow(d){if(!G.ready||!S.r)return;const my=++svShowSeq;G.off=true;G.stepping=true;try{await svLocate(d,false)}finally{if(my===svShowSeq){G.stepping=false;G.nextAt=performance.now()+STEP_MS/S.speed}}}
 
 function openSettings(){$('keyin').value=G.key;$('limitin').value=G.limit;quotaText();gstatus(G.failed,G.failed?'bad':'');$('settings').hidden=false;$('keyin').focus()}
 $('openSettings').onclick=openSettings;$('closeSettings').onclick=()=>{$('settings').hidden=true};
@@ -999,6 +1103,10 @@ function tick(now){const dt=Math.min(0.1,(now-last)/1000);last=now;
   if(S.r){
     if(Math.abs(S.d-S.vis)>0.05){S.vis+=(S.d-S.vis)*Math.min(1,dt*6);if(Math.abs(S.d-S.vis)<0.05)S.vis=S.d;if(S.follow)centerCar();dirty=true}
     updHaz(now);
+    if(S.mode==='manual'&&S.gears&&!MAN.err&&!MAN.done){
+      const long=MAN.engine&&MAN.brakeOn&&MAN.gear!=='N'&&S.haz.some(h=>blocking(h)&&(h.type==='light'||h.type==='train')&&h.at-S.d<45&&h.at>S.d-0.5);
+      if(!long)MAN.longT=0;else if(!MAN.longT)MAN.longT=now;else if(now-MAN.longT>5000*TS&&!MAN.longDone){MAN.longDone=true;manError({gearErr:true,at:S.d},[ERR.longStop()],[])}
+      if(!long&&!MAN.brakeOn)MAN.longDone=false}
     if(S.mode==='auto'&&S.playing&&!S.await){
       const hb=S.haz.find(h=>blocking(h)&&h.at>S.d-0.5&&h.at-S.d<(G.ready?16:70));
       if(S.hold>0)S.hold-=dt;
